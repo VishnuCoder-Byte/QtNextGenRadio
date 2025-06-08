@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>main.qml</file>
+        <file>StatePage.qml</file>
+        <file>StartupPage.qml</file>
+        <file>MainPage.qml</file>
+        <file>NotificationPage.qml</file>
+    </qresource>
+</RCC>
