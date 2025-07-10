@@ -1,0 +1,157 @@
+FROM ubuntu:22.04
+
+
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+ENV QT_VERSION=6.9.0
+
+
+
+# Install dependencies
+
+RUN apt-get update && apt-get install -y \
+
+    build-essential \
+
+    git \
+
+    python3 \
+
+    python3-pip \
+
+    ninja-build \
+
+    cmake \
+
+    curl \
+
+    wget \
+
+    unzip \
+
+    libssl-dev \
+
+    libglib2.0-dev \
+
+    pkg-config \
+
+    qttools5-dev \
+
+    qtchooser \
+
+    gperf \
+
+    bison \
+
+    flex \
+
+    libxcb1-dev \
+
+    libx11-dev \
+
+    libx11-xcb-dev \
+
+    libxcb-glx0-dev \
+
+    libxcb-util0-dev \
+
+    libxcb-keysyms1-dev \
+
+    libxcb-image0-dev \
+
+    libxcb-shm0-dev \
+
+    libxcb-icccm4-dev \
+
+    libxcb-sync-dev \
+
+    libxcb-render-util0-dev \
+
+    libxcb-xfixes0-dev \
+
+    libxrender-dev \
+
+    libxkbcommon-dev \
+
+    libxkbcommon-x11-dev \
+
+    xkb-data \
+
+    libfontconfig1-dev \
+
+    libfreetype6-dev \
+
+    libinput-dev \
+
+    libudev-dev \
+
+    libegl1-mesa-dev \
+
+    libdrm-dev \
+
+    crossbuild-essential-arm64 \
+
+    gcc-aarch64-linux-gnu \
+
+    g++-aarch64-linux-gnu \
+
+    && rm -rf /var/lib/apt/lists/*
+
+
+
+# Set up working directory
+
+WORKDIR /opt/qt
+
+
+
+# Clone Qt source (minimal)
+
+RUN git clone --branch v$QT_VERSION https://code.qt.io/qt/qt5.git qt6 && \
+
+    cd qt6 && \
+
+    perl init-repository --module-subset=qtbase,qtsvg,qtdeclarative,qtshadertools
+
+
+
+WORKDIR /opt/qt/qt6
+
+# Run configure from source directory
+
+WORKDIR /opt/qt/qt6
+
+
+
+RUN ./configure \
+
+    -prefix /opt/qt/qt6/qt-arm64-install \
+
+    -release \
+
+    -opensource -confirm-license \
+
+    -xplatform linux-aarch64-gnu-g++ \
+
+    -device-option CROSS_COMPILE=aarch64-linux-gnu- \
+
+    -nomake examples -nomake tests \
+
+    -skip qtwebengine -skip qt3d -skip qtdoc -skip qttools \
+
+    -qt-libpng -qt-libjpeg -qt-freetype -qt-harfbuzz \
+
+    -system-zlib \
+
+    -openssl-linked
+
+
+
+
+WORKDIR /opt/qt/qt6
+
+RUN cmake --build . --parallel && cmake --install .
+
+
+
