@@ -1,0 +1,132 @@
+#!/bin/bash
+set -e
+
+# -------------------------------
+# CONFIGURATION VARIABLES
+# -------------------------------
+YOCTO_DIR="$HOME/yocto-qt6"
+BRANCH="kirkstone"
+MACHINE="qemuarm64"
+IMAGE_NAME="qt6-minimal-image"
+DISPLAY_WIDTH=480
+DISPLAY_HEIGHT=120
+RAM_MB=2048
+
+# -------------------------------
+# STEP 1: Install Required Packages
+# -------------------------------
+echo "Installing required packages..."
+sudo apt update
+sudo apt install -y gawk wget git-core diffstat unzip texinfo gcc-multilib \
+  build-essential chrpath socat cpio python3 python3-pip python3-pexpect \
+  xz-utils debianutils iputils-ping libsdl1.2-dev xterm curl
+
+# -------------------------------
+# STEP 2: Clone Yocto and Layers
+# -------------------------------
+echo "Cloning Yocto repositories..."
+mkdir -p "$YOCTO_DIR" && cd "$YOCTO_DIR"
+git clone -b "$BRANCH" git://git.yoctoproject.org/poky
+cd poky
+git clone -b 6.9 git://code.qt.io/yocto/meta-qt6.git
+git clone -b "$BRANCH" https://git.openembedded.org/meta-openembedded
+git clone -b "$BRANCH" https://git.yoctoproject.org/meta-wayland
+
+# -------------------------------
+# STEP 3: Setup Build Environment
+# -------------------------------
+echo "Setting up Yocto build environment..."
+source oe-init-build-env build-qt6
+
+# -------------------------------
+# STEP 4: Configure bblayers.conf
+# -------------------------------
+cat > conf/bblayers.conf <<EOF
+BBPATH = "\${TOPDIR}"
+BBFILES ?= ""
+
+BBLAYERS ?= " \\
+  \${TOPDIR}/../poky/meta \\
+  \${TOPDIR}/../poky/meta-poky \\
+  \${TOPDIR}/../poky/meta-yocto-bsp \\
+  \${TOPDIR}/../meta-openembedded/meta-oe \\
+  \${TOPDIR}/../meta-openembedded/meta-networking \\
+  \${TOPDIR}/../meta-openembedded/meta-multimedia \\
+  \${TOPDIR}/../meta-openembedded/meta-graphics \\
+  \${TOPDIR}/../meta-openembedded/meta-filesystems \\
+  \${TOPDIR}/../meta-qt6 \\
+"
+EOF
+
+# -------------------------------
+# STEP 5: Configure local.conf
+# -------------------------------
+echo "Configuring local.conf..."
+sed -i "s/^MACHINE ?=.*/MACHINE ?= \"qemuarm64\"/" conf/local.conf
+
+cat >> conf/local.conf <<EOF
+
+DISTRO_FEATURES:append = " wayland opengl pam x11"
+IMAGE_FEATURES += "ssh-server-dropbear package-management"
+PACKAGE_CLASSES = "package_ipk"
+INIT_MANAGER = "systemd"
+
+QB_MEM = "-m ${RAM_MB}"
+QB_OPT_APPEND += "-display sdl -vga virtio"
+APPEND += "weston-launch --width=${DISPLAY_WIDTH} --height=${DISPLAY_HEIGHT}"
+
+EXTRA_IMAGE_FEATURES += "tools-sdk tools-debug debug-tweaks"
+EOF
+
+# -------------------------------
+# STEP 6: Create Custom Image Layer
+# -------------------------------
+echo "Creating meta-custom layer..."
+cd "$YOCTO_DIR/poky"
+bitbake-layers create-layer ../meta-custom
+bitbake-layers add-layer ../meta-custom
+
+mkdir -p ../meta-custom/recipes-core/images
+
+cat > ../meta-custom/recipes-core/images/${IMAGE_NAME}.bb <<EOF
+SUMMARY = "Minimal image with Qt6 and Wayland"
+LICENSE = "MIT"
+
+inherit core-image
+
+IMAGE_INSTALL += " \\
+    packagegroup-core-boot \\
+    packagegroup-core-tools-debug \\
+    weston \\
+    wayland \\
+    qtbase \\
+    qtwayland \\
+    qtdeclarative \\
+    qtquick3d \\
+    qtquickcontrols2 \\
+"
+EOF
+
+
+mkdir -p ~/yocto-qt6/poky/build/downloads
+cd ~/yocto-qt6/poky/build/downloads
+
+wget https://ftp.x.org/pub/individual/util/util-macros-1.19.3.tar.gz
+wget https://ftp.x.org/pub/individual/proto/xorgproto-2021.5.tar.bz2
+
+# -------------------------------
+# STEP 7: Build the Image
+# -------------------------------
+echo "Starting build..."
+
+source oe-init-build-env build-qt6
+bitbake $IMAGE_NAME
+
+# -------------------------------
+# STEP 8: Done
+# -------------------------------
+echo
+echo "✅ Yocto build completed!"
+echo "To run in QEMU:"
+echo "  cd $YOCTO_DIR/poky/build-qt6"
+echo "  runqemu $MACHINE nographic slirp $IMAGE_NAME"
